@@ -626,9 +626,11 @@ void CMap::loadMap(const std::string& file, ReadType iReadType)
 			//Read in background to use
 			ReadString(szBackgroundFile, 128, mapfile);
 			
+			char * backgroundConversion = (char *)malloc(512);
 			for(short iBackground = 0; iBackground < 26; iBackground++)
 			{
-				char * szFindUnderscore = strstr(g_szBackgroundConversion[iBackground], "_");
+				strcpy(backgroundConversion, g_szBackgroundConversion[iBackground]);
+				char * szFindUnderscore = strstr(backgroundConversion, "_");
 
 				if(szFindUnderscore)
 					szFindUnderscore++;
@@ -638,6 +640,7 @@ void CMap::loadMap(const std::string& file, ReadType iReadType)
 					strcpy(szBackgroundFile, g_szBackgroundConversion[iBackground]);
 				}
 			}
+			free(backgroundConversion);
 		}
 		else
 		{
