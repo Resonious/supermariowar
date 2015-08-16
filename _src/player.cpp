@@ -1,5 +1,6 @@
 #include "global.h"
 #include <math.h>
+#include "fann.h"
 
 extern bool SwapPlayers(short iUsingPlayerID);
 extern void EnterBossMode(short bossType);
@@ -76,18 +77,25 @@ CPlayer::CPlayer(short iGlobalID, short iLocalID, short iTeamID, short iSubTeamI
 	iSuicideCreditTimer = 0;
 
 	game_values.unlocksecret1part1[globalID] = false;
+
+	// FANN: Hopefully this is enough space!
+	trainingdata = (char *)malloc(1048576 * 50);
+	clear_training_data();
 }
 
 CPlayer::~CPlayer()
 {
 	if(pPlayerAI)
 		delete pPlayerAI;
+
+	free(trainingdata);
 }
 
 void CPlayer::Init()
 {
 	if(pPlayerAI)
 		pPlayerAI->Init();
+
 }
 
 void CPlayer::move()
@@ -100,7 +108,9 @@ void CPlayer::move()
 			//Calculate movement every 4th frame (speed up optimization)
 			if(game_values.cputurn == globalID)
 			{
+				record_training_data();
 				cpu_think();
+				apply_training_data();
 
 				if(playerKeys->game_jump.fDown|| playerKeys->game_left.fDown || playerKeys->game_right.fDown)
 					ResetSuicideTime();
@@ -2186,6 +2196,133 @@ void CPlayer::cpu_think()
 	pPlayerAI->Think(playerKeys);
 }
 
+void CPlayer::record_training_data()
+{
+	// Invincible?
+	// bool fInvincible = invincible || shield || shyguy;
+	training.velx = velx;
+	training.vely = vely;
+	training.invincibletimer = invincibletimer;
+	training.powerup = powerup;
+
+	// Get nearest player
+	float nearestdist = 10000.0f;
+	CPlayer * nearestplayer = NULL;
+	for (short iPlayer = 0; iPlayer < list_players_cnt; iPlayer++)
+	{
+		if (iPlayer == localID || list_players[iPlayer]->state != player_ready)
+			continue;
+
+		float px = sqrtf(list_players[iPlayer]->fx);
+		float py = sqrtf(list_players[iPlayer]->fy);
+		float plrdist = sqrt(px * px + py * py);
+
+		if (plrdist < nearestdist)
+			nearestplayer = list_players[iPlayer];
+	}
+
+	// Distance from ground and ceiling
+	short centerx = ix + HALFPW;
+	short centery = iy + HALFPH;
+	short tilex = centerx / TILESIZE;
+	short tiley = centery / TILESIZE;
+	training.grounddist = 100.0f;
+	while (training.grounddist > 99.0f)
+	{
+		if (g_map.block(tilex, tiley) != NULL || g_map.blockat(tilex, tiley) != NULL)
+			training.grounddist = (float)tiley - fy;
+
+		tiley += 1;
+		if (tiley >= 15)
+			break;
+	}
+	tiley = centery / TILESIZE;
+	training.ceildist = 100.0f;
+	while (training.ceildist > 99.0f)
+	{
+		if (g_map.block(tilex, tiley) != NULL || g_map.blockat(tilex, tiley) != NULL)
+			training.ceildist = fy - (float)tiley;
+
+		tiley -= 1;
+		if (tiley < 0)
+			break;
+	}
+
+	// In air?
+	training.inairf = inair ? 1.0f : 0.0f;
+
+	// Accepting item?
+	training.iacceptingf = IsAcceptingItem() ? 1.0f : 0.0f;
+	// Has item?
+	training.hasitemf = carriedItem != NULL ? 1.0f : 0.0f;
+
+	// Nearest player stats
+	training.nearvelx = 100.0f;
+	training.nearvely = 100.0f;
+	training.neardistx = 100.0f;
+    training.neardisty = 100.0f;
+    training.nearhasitemf = 100.0f;
+
+	if (nearestplayer)
+	{
+		training.nearvelx = nearestplayer->velx;
+		training.nearvely = nearestplayer->vely;
+		training.neardistx = nearestplayer->fx - fx;
+		training.neardisty = nearestplayer->fy - fy;
+		training.nearhasitemf = nearestplayer->carriedItem != NULL ? 1.0f : 0.0f;
+	}
+}
+
+void CPlayer::apply_training_data()
+{
+	sprintf(
+		trainingdata + trainingpos,
+		"%f %f %f %f %f %f %f %f %f %f %f %f %f %f\n\n%f %f %f %f %f %f\n\n\n",
+		// INPUTS
+		training.velx, training.vely, training.inairf, training.grounddist,
+		training.ceildist, training.invincibletimer, training.powerup,
+		training.iacceptingf, training.hasitemf, training.nearvelx, training.nearvely,
+		training.neardistx, training.neardisty, training.nearhasitemf,
+
+		// OUTPUTS
+		btof(&playerKeys->game_left),  btof(&playerKeys->game_right),
+		btof(&playerKeys->game_jump),  btof(&playerKeys->game_down),
+		btof(&playerKeys->game_turbo), btof(&playerKeys->game_powerup)
+	);
+	int sizeofnewdata = strlen(trainingdata + trainingpos);
+	trainingpos += sizeofnewdata;
+
+	if (trainingpos > 100000)
+		printf("holy fuck\n");
+}
+
+float CPlayer::btof(CKeyState * b) { return b->fDown ? 1.0f : 0.0f; }
+
+void CPlayer::write_training_data()
+{
+	for (short iPlayer = 0; iPlayer < list_players_cnt; iPlayer++)
+	{
+		if (iPlayer == localID || list_players[iPlayer]->state != player_ready)
+			continue;
+
+		CPlayerAI * ai = list_players[iPlayer]->pPlayerAI;
+		if (ai && ai->is_nn) ((CFannAI *)ai)->train_on(&training);
+	}
+
+	printf("FANN: Appending training data onto game file!\n");
+
+	strcpy(gametrainingdata + gametrainingpos, trainingdata);
+	gametrainingpos += strlen(trainingdata);
+	gametrainingcount += 1;
+	clear_training_data();
+}
+
+void CPlayer::clear_training_data()
+{
+	trainingdata[0] = 0;
+	trainingpos = 0;
+}
+
 
 void CPlayer::die(short deathStyle, bool fTeamRemoved, bool fKillCarriedItem)
 {
@@ -2617,6 +2754,10 @@ short PlayerKilledPlayer(short iKiller, CPlayer * killed, short deathstyle, kill
 	}
 	else
 	{
+		killer->write_training_data();
+		killer->clear_training_data();
+		killed->clear_training_data();
+
 		killed->DeathAwards();
 		
 		short iKillType = game_values.gamemode->playerkilledself(*killed, style);
@@ -2642,6 +2783,10 @@ short PlayerKilledPlayer(CPlayer * killer, CPlayer * killed, short deathstyle, k
 	if(killed->state != player_ready)
 		return player_kill_none;
 	
+	killer->write_training_data();
+	killer->clear_training_data();
+	killed->clear_training_data();
+
 	bool fSoundPlayed = false;
 	if(game_values.gamemode->chicken == killer && style != kill_style_pow)
 	{

@@ -2,6 +2,8 @@
 #define _PLAYER_H
 
 #include "ai.h"
+#include "fann_ai.h"
+
 enum PlayerState {player_wait, player_spawning, player_dead, player_ready, player_entering_warp_up, player_entering_warp_right, player_entering_warp_down, player_entering_warp_left, player_exiting_warp_down, player_exiting_warp_left, player_exiting_warp_up, player_exiting_warp_right};
 enum PlayerAction {player_action_none, player_action_bobomb, player_action_fireball, player_action_hammer, player_action_boomerang, player_action_iceblast, player_action_bomb, player_action_spincape, player_action_spintail};
 
@@ -89,6 +91,12 @@ enum killstyle{kill_style_stomp = 0, kill_style_star = 1, kill_style_fireball = 
 enum awardstyle{award_style_none = 0, award_style_fireworks = 1, award_style_swirl = 2, award_style_halo = 3, award_style_souls = 4, award_style_text = 5};
 enum deathstyle{death_style_jump = 0, death_style_squish = 1, death_style_shatter = 2};
 
+struct PlayerTrainingData
+{
+	float velx, vely, inairf, grounddist, ceildist, invincibletimer,
+		powerup, iacceptingf, hasitemf, nearvelx, nearvely, neardistx,
+		neardisty, nearhasitemf;
+};
 
 //the player class - a lot of optimization can be done here
 //(especially the collision detection stuff in collision_detection_map())
@@ -108,6 +116,10 @@ class CPlayer
 		void move();
 		void mapcollisions();
 		void cpu_think();
+		void write_training_data();
+		void record_training_data();
+		void apply_training_data();
+		void clear_training_data();
 
 		void CommitAction();
 
@@ -372,6 +384,12 @@ class CPlayer
 
 		Spotlight * sSpotlight;
 
+		// FANN: Training data that accumulates over time.
+		PlayerTrainingData training;
+		char * trainingdata;
+		int trainingpos;
+		float btof(CKeyState*);
+
 		friend bool coldec_player2player(CPlayer * o1, CPlayer * o2);
 		friend void collisionhandler_p2p(CPlayer * o1, CPlayer * o2);
 		friend void _collisionhandler_p2p_pushback(CPlayer * o1, CPlayer * o2);
@@ -520,6 +538,7 @@ class CPlayer
 
 		friend class CPlayerAI;
 		friend class CSimpleAI;
+		friend class CFannAI;
 };
 
 

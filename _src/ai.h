@@ -74,6 +74,7 @@ class CPlayerAI
 		void DistanceToObjectCenter(CObject * object, CObject ** target, int * nearest, bool * wrap);
 		void DistanceToPlayer(CPlayer * player, CPlayer ** target, int * nearest, bool * wrap);
 
+		bool is_nn;
 	protected:
 		CPlayer * pPlayer;
 

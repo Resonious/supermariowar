@@ -630,6 +630,10 @@ extern short currentgamemode;
 extern float CapFallingVelocity(float vel);
 extern float CapSideVelocity(float vel);
 
+extern char * gametrainingdata;
+extern int gametrainingpos;
+extern int gametrainingcount;
+
 extern int g_iNextNetworkID;
 extern int g_iNextMessageID;
 extern char szIPString[32];

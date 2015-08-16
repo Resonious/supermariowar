@@ -76,6 +76,8 @@ class SimpleFileList
     protected:
         std::vector<std::string> filelist;
         int currentIndex;
+
+		friend class CFannAI;
 };
 
 class SimpleDirectoryList : public SimpleFileList

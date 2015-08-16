@@ -780,6 +780,11 @@ TourList tourlist;
 WorldList worldlist;
 WorldMap g_worldmap;
 
+//FANN stuff
+char * gametrainingdata;
+int gametrainingpos;
+int gametrainingcount;
+
 std::vector<MapMusicOverride*> mapmusicoverrides;
 std::vector<WorldMusicOverride*> worldmusicoverrides;
 
@@ -1714,6 +1719,12 @@ void RunGame()
 		iCountDownTimer = iCountDownTimes[0];
 	}
 
+	//Initialize FANN training data
+	if (!gametrainingdata) gametrainingdata = (char *)malloc(1048576 * 200);
+	gametrainingdata[0] = 0;
+	gametrainingpos = 0;
+	gametrainingcount = 0;
+
 	//Reset the screen spin variables
 	spinangle = 0.0f;
 	spinspeed = 0.0f;
@@ -1766,10 +1777,14 @@ void RunGame()
 				LookupTeamID(iPlayer, &teamid, &subteamid);
 
 				CPlayerAI * ai = NULL;
-				if(game_values.playercontrol[iPlayer] == 2)
-					ai = new CPlayerAI();
+				if (game_values.playercontrol[iPlayer] == 2)
+					if (iPlayer == 3) ai = new CFannAI();
+					else ai = new CPlayerAI();
 
-				list_players[list_players_cnt] = new CPlayer(iPlayer, list_players_cnt, teamid, subteamid, game_values.colorids[iPlayer], spr_player[iPlayer], score[teamid], &(respawn[iPlayer]), ai);
+				list_players[list_players_cnt] = new CPlayer(
+					iPlayer, list_players_cnt, teamid, subteamid, game_values.colorids[iPlayer],
+					spr_player[iPlayer], score[teamid], &(respawn[iPlayer]), ai
+				);
 				list_players_cnt++;
 			}
 			else if(!game_values.keeppowerup)
@@ -3615,6 +3630,30 @@ void CleanUp()
 
 	x_shake = 0;
 	y_shake = 0;
+
+	//Write to file and reset FANN training data
+	if (gametrainingpos > 0)
+	{
+		char filename[50];
+		sprintf(filename, "training/training_%i.data", time(NULL));
+		FILE * trainingfile = fopen(filename, "w+");
+		printf("FANN: Writing training file to %s\n", filename);
+		// FANN INPUTS:
+		// self.velx   self.vely   self.inair    self.grounddist     self.ceildist
+		// self.invincibletimer    self.powerup  self.acceptingitem  self.hasitem
+		// near.velx   near.vely   near.distx    near.disty          near.hasitem
+		// TODO MAYBE LATER
+		// qblk.distx  qblk.disty  item.distx    item.disty
+		// 14 inputs, 6 outputs
+		fprintf(trainingfile, "%i %i %i\n\n\n", gametrainingcount, 14, 6);
+		fwrite(gametrainingdata, 1, gametrainingpos + 1, trainingfile);
+		fclose(trainingfile);
+		printf("FANN: Wrote that shit!!!\n");
+
+		gametrainingdata[0] = 0;
+		gametrainingpos = 0;
+		gametrainingcount = 0;
+	}
 }
 
 void UpdateScoreBoard()

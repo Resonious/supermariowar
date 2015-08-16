@@ -216,6 +216,7 @@ CPlayerAI::CPlayerAI()
 	currentAttentionObject.iID = -1;
 	currentAttentionObject.iType = 0;
 	currentAttentionObject.iTimer = 0;
+	is_nn = false;
 }
 
 CPlayerAI::~CPlayerAI()
